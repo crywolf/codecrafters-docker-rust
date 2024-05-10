@@ -20,9 +20,8 @@ fn main() -> Result<()> {
         print!("{}", std_out);
         let std_err = std::str::from_utf8(&output.stderr)?;
         eprint!("{}", std_err);
+        std::process::exit(output.status.code().unwrap_or(0));
     } else {
-        std::process::exit(1);
+        std::process::exit(output.status.code().unwrap_or(1));
     }
-
-    Ok(())
 }
