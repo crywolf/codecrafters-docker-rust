@@ -7,16 +7,10 @@ fn main() -> Result<()> {
     let command = &args[3];
     let command_args = &args[4..];
 
-    let dir = std::env::temp_dir().join("sandbox");
-    fs::create_dir_all(&dir)?;
+    isolate_filesystem(command)?;
+    isolate_process();
 
-    let executable = dir.join("executable");
-    fs::copy(command, executable)?;
-
-    std::os::unix::fs::chroot(dir)?;
-    std::env::set_current_dir("/")?;
-    fs::create_dir_all("/dev/null")?;
-
+    // Run the command
     let output = std::process::Command::new("./executable")
         .args(command_args)
         .output()
@@ -37,4 +31,31 @@ fn main() -> Result<()> {
     } else {
         std::process::exit(output.status.code().unwrap_or(1));
     }
+}
+
+/// Filesystem isolation
+fn isolate_filesystem(command: &str) -> Result<()> {
+    let dir = std::env::temp_dir().join("sandbox");
+    fs::create_dir_all(&dir).context("creating tempdir")?;
+
+    let executable = dir.join("executable");
+    fs::copy(command, executable).context("copying executable")?;
+
+    std::os::unix::fs::chroot(dir).context("calling chroot")?;
+    std::env::set_current_dir("/")?;
+    fs::create_dir_all("/dev/null")?;
+
+    Ok(())
+}
+
+/// Process isolation
+fn isolate_process() {
+    // Isolates the newly created process from the host system's processes. It will get a PID of 1.
+    // https://man7.org/linux/man-pages/man7/namespaces.7.html
+    // The unshare(2) system call moves the calling process to a
+    // new namespace.  If the flags argument of the call
+    // specifies one or more of the CLONE_NEW* flags listed
+    // above, then new namespaces are created for each flag, and
+    // the calling process is made a member of those namespaces.
+    unsafe { libc::unshare(libc::CLONE_NEWPID) };
 }
