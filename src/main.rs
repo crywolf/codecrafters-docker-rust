@@ -35,11 +35,10 @@ fn main() -> Result<()> {
 
 /// Filesystem isolation
 fn isolate_filesystem(command: &str) -> Result<()> {
-    let dir = std::env::temp_dir().join("sandbox");
-    fs::create_dir_all(&dir).context("creating tempdir")?;
+    let dir = tempfile::tempdir()?.into_path();
 
     let executable = dir.join("executable");
-    fs::copy(command, executable).context("copying executable")?;
+    fs::copy(command, executable).context("copying command executable")?;
 
     std::os::unix::fs::chroot(dir).context("calling chroot")?;
     std::env::set_current_dir("/")?;
