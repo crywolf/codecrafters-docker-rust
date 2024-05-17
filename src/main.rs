@@ -1,17 +1,27 @@
+mod registry;
+
 use anyhow::{Context, Result};
-use std::fs;
+use std::{fs, path::PathBuf};
 
 // Usage: your_docker.sh run <image> <command> <arg1> <arg2> ...
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
+    let image = &args[2];
     let command = &args[3];
     let command_args = &args[4..];
 
-    isolate_filesystem(command)?;
+    let architecture = "amd64";
+    let os = "linux";
+
+    let dir = tempfile::tempdir()?.into_path();
+
+    registry::pull_image(&dir, image, architecture, os)?;
+
+    isolate_filesystem(&dir)?;
     isolate_process();
 
     // Run the command
-    let output = std::process::Command::new("./executable")
+    let output = std::process::Command::new(command)
         .args(command_args)
         .output()
         .with_context(|| {
@@ -34,13 +44,8 @@ fn main() -> Result<()> {
 }
 
 /// Filesystem isolation
-fn isolate_filesystem(command: &str) -> Result<()> {
-    let dir = tempfile::tempdir()?.into_path();
-
-    let executable = dir.join("executable");
-    fs::copy(command, executable).context("copying command executable")?;
-
-    std::os::unix::fs::chroot(dir).context("calling chroot")?;
+fn isolate_filesystem(root_dir: &PathBuf) -> Result<()> {
+    std::os::unix::fs::chroot(root_dir).context("calling chroot")?;
     std::env::set_current_dir("/")?;
     fs::create_dir_all("/dev/null")?;
 
